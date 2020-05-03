@@ -229,6 +229,7 @@ def add_obstacle_tracking(obstacles_stream,
 
 def add_tracking_evaluation(obstacle_tracking_stream,
                             ground_obstacles_stream,
+                            pose_stream,
                             name='tracking_eval_operator'):
     from pylot.perception.tracking.tracking_eval_operator import \
         TrackingEvalOperator
@@ -237,7 +238,7 @@ def add_tracking_evaluation(obstacle_tracking_stream,
                                      csv_log_file_name=FLAGS.csv_log_file_name,
                                      profile_file_name=FLAGS.profile_file_name)
     erdos.connect(TrackingEvalOperator, op_config,
-                  [obstacle_tracking_stream, ground_obstacles_stream], FLAGS)
+                  [obstacle_tracking_stream, ground_obstacles_stream, pose_stream], FLAGS)
 
 
 def add_depth_estimation(left_camera_stream,

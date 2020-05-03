@@ -299,7 +299,7 @@ def add_obstacle_tracking(center_camera_stream,
 
     if FLAGS.evaluate_obstacle_tracking:
         pylot.operator_creator.add_tracking_evaluation(
-            obstacles_wo_history_tracking_stream, obstacles_stream)
+            obstacles_wo_history_tracking_stream, obstacles_stream, pose_stream)
 
     return obstacles_tracking_stream
 

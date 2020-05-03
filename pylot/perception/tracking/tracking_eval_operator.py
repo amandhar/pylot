@@ -19,12 +19,13 @@ class TrackingEvalOperator(erdos.Operator):
             received from the simulator.
         flags (absl.flags): Object to be used to access absl flags.
     """
-    def __init__(self, obstacle_tracking_stream, ground_obstacles_stream,
+    def __init__(self, obstacle_tracking_stream, ground_obstacles_stream, pose_stream,
                  flags):
         obstacle_tracking_stream.add_callback(self.on_tracker_obstacles)
         ground_obstacles_stream.add_callback(self.on_ground_obstacles)
+        pose_stream.add_callback(self.on_pose)
         erdos.add_watermark_callback(
-            [obstacle_tracking_stream, ground_obstacles_stream], [],
+            [obstacle_tracking_stream, ground_obstacles_stream, pose_stream], [],
             self.on_watermark)
         self._flags = flags
         self._logger = erdos.utils.setup_logging(self.config.name,
@@ -36,6 +37,8 @@ class TrackingEvalOperator(erdos.Operator):
         self._tracked_obstacles = []
         # Buffer of ground obstacles.
         self._ground_obstacles = []
+        # Buffer of poses.
+        self._poses = []
         # Heap storing pairs of (ground/output time, game time).
         self._tracker_start_end_times = []
         self._sim_interval = None
@@ -43,7 +46,7 @@ class TrackingEvalOperator(erdos.Operator):
         self._metrics_host = mm.metrics.create()
 
     @staticmethod
-    def connect(obstacle_tracking_stream, ground_obstacles_stream):
+    def connect(obstacle_tracking_stream, ground_obstacles_stream, pose_stream):
         """Connects the operator to other streams.
 
         Args:
@@ -81,9 +84,13 @@ class TrackingEvalOperator(erdos.Operator):
                 # This is the closest ground bounding box to the end time.
                 heapq.heappop(self._tracker_start_end_times)
                 ground_obstacles = self.__get_ground_obstacles_at(end_time)
+                # Get vehicle forward speed from pose closest to end time.
+                forward_speed = self.__get_pose_at(end_time).forward_speed
                 # Get tracker output obstacles.
                 tracker_obstacles = self.__get_tracked_obstacles_at(start_time)
                 if (len(tracker_obstacles) > 0 or len(ground_obstacles) > 0):
+                    if forward_speed < self._flags.target_speed - 3:
+                        break
                     metrics_summary_df = self.get_tracker_metrics(
                         tracker_obstacles, ground_obstacles)
                     # Get runtime in ms
@@ -158,6 +165,15 @@ class TrackingEvalOperator(erdos.Operator):
         self._logger.fatal(
             'Could not find tracked obstacles for {}'.format(timestamp))
 
+    def __get_pose_at(self, timestamp):
+        for (time, pose) in self._poses:
+            if time == timestamp:
+                return pose
+            elif time > timestamp:
+                break
+        self._logger.fatal(
+            'Could not find pose for {}'.format(timestamp))
+
     def __garbage_collect_obstacles(self):
         # Get the minimum watermark.
         watermark = None
@@ -180,6 +196,13 @@ class TrackingEvalOperator(erdos.Operator):
             index += 1
         if index > 0:
             self._ground_obstacles = self._ground_obstacles[index:]
+        # Remove all the poses that are below the watermark.
+        index = 0
+        while (index < len(self._poses)
+               and self._poses[index][0] < watermark):
+            index += 1
+        if index > 0:
+            self._poses = self._poses[index:]
 
     def on_tracker_obstacles(self, msg):
         game_time = msg.timestamp.coordinates[0]
@@ -189,6 +212,10 @@ class TrackingEvalOperator(erdos.Operator):
     def on_ground_obstacles(self, msg):
         game_time = msg.timestamp.coordinates[0]
         self._ground_obstacles.append((game_time, msg.obstacles))
+
+    def on_pose(self, msg):
+        game_time = msg.timestamp.coordinates[0]
+        self._poses.append((game_time, msg.data))
 
     def get_tracker_metrics(self, tracked_obstacles, ground_obstacles):
         """Computes several tracker accuracy metrics using motmetrics library.
