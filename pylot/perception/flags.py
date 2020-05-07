@@ -45,6 +45,7 @@ flags.DEFINE_float(
     'IoU required between detection and track for matching to be considered')
 flags.DEFINE_integer('obstacle_track_max_age', 3,
                      'Number of frames to track without a detection update')
+flags.DEFINE_integer('skip_every_nth_detection', 1, 'Used to determine how often detections are sent to tracker. 1 means every detection is sent.')
 
 # DeepSORT tracking flags.
 flags.DEFINE_string(
