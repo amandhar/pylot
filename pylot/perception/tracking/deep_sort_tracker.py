@@ -38,7 +38,7 @@ class MultiObjectDeepSORTTracker(MultiObjectTracker):
                 bboxes.append(obstacle.bounding_box.as_width_height_bbox())
                 labels.append(obstacle.label)
                 confidence_scores.append(obstacle.confidence)
-                ids.append(obstacle.id)
+                ids.append(-1) # obstacle.id
             self._deepsort.run_deep_sort(
                 frame.frame, confidence_scores, bboxes, labels, ids)
         else:

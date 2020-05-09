@@ -57,5 +57,6 @@ class MultiObjectSORTTracker(MultiObjectTracker):
             ]
             converted_detections.append(bbox)
             labels.append(obstacle.label)
-            ids.append(obstacle.id)
+            #ids.append(obstacle.id)
+            ids.append(-1)
         return (np.array(converted_detections), labels, ids)

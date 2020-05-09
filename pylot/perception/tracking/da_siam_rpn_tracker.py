@@ -12,7 +12,7 @@ from pylot.perception.tracking.multi_object_tracker import MultiObjectTracker
 
 
 class SingleObjectDaSiamRPNTracker(object):
-    def __init__(self, frame, obstacle, siam_net):
+    def __init__(self, frame, obstacle, siam_net, track_id=-1):
         """ Construct a single obstacle tracker.
 
         Args:
@@ -30,6 +30,7 @@ class SingleObjectDaSiamRPNTracker(object):
         ])
         self._tracker = SiamRPN_init(frame.frame, target_pos, target_size,
                                      siam_net)
+        self.track_id = track_id if track_id != -1 else self.obstacle.id
 
     def track(self, frame):
         """ Tracks obstacles in a frame.
@@ -48,7 +49,7 @@ class SingleObjectDaSiamRPNTracker(object):
             int(target_pos[1] + target_sz[1] / 2.0))
         return DetectedObstacle(self.obstacle.bounding_box,
                                 self.obstacle.confidence, self.obstacle.label,
-                                self.obstacle.id)
+                                self.track_id)
 
     def reset_bbox(self, bbox):
         """Resets tracker's bounding box with a new bounding box."""
@@ -70,6 +71,7 @@ class MultiObjectDaSiamRPNTracker(MultiObjectTracker):
         self._trackers = []
         self._min_matching_iou = flags.min_matching_iou
         self._max_missed_detections = flags.obstacle_track_max_age
+        self.count = 0
 
     def initialize(self, frame, obstacles):
         """ Initializes a multiple obstacle tracker.
@@ -81,7 +83,8 @@ class MultiObjectDaSiamRPNTracker(MultiObjectTracker):
         # Create a tracker for each obstacle.
         for obstacle in obstacles:
             self._trackers.append(
-                SingleObjectDaSiamRPNTracker(frame, obstacle, self._siam_net))
+                SingleObjectDaSiamRPNTracker(frame, obstacle, self._siam_net, track_id=self.count))
+            self.count += 1
 
     def reinitialize(self, frame, obstacles):
         """ Renitializes a multiple obstacle tracker.
@@ -107,7 +110,7 @@ class MultiObjectDaSiamRPNTracker(MultiObjectTracker):
         row_ids, col_ids = solve_dense(cost_matrix)
         matched_map = {}
         for row_id, col_id in zip(row_ids, col_ids):
-            matched_map[self._trackers[col_id].obstacle.id] = row_id
+            matched_map[self._trackers[col_id].track_id] = row_id
         matched_obstacle_indices, matched_tracker_indices = set(row_ids), set(
             col_ids)
 
@@ -127,7 +130,7 @@ class MultiObjectDaSiamRPNTracker(MultiObjectTracker):
             # this, the tracker's bounding box degrades across the frames until
             # it doesn't overlap with the bounding box the detector outputs.
             tracker.reset_bbox(
-                obstacles[matched_map[tracker.obstacle.id]].bounding_box)
+                obstacles[matched_map[tracker.track_id]].bounding_box)
             updated_trackers.append(tracker)
         # Add 1 to age of any unmatched trackers, filter old ones.
         for tracker in unmatched_trackers:
@@ -136,20 +139,21 @@ class MultiObjectDaSiamRPNTracker(MultiObjectTracker):
                 updated_trackers.append(tracker)
             else:
                 self._logger.debug("Dropping tracker with id {}".format(
-                    tracker.obstacle.id))
+                    tracker.track_id))
         # Initialize trackers for unmatched obstacles.
         for obstacle in unmatched_obstacles:
             updated_trackers.append(
-                SingleObjectDaSiamRPNTracker(frame, obstacle, self._siam_net))
+                SingleObjectDaSiamRPNTracker(frame, obstacle, self._siam_net, self.count))
+            self.count += 1
         # Keep one tracker per obstacle id; prefer trackers with recent
         # detection updates.
         unique_updated_trackers = {}
         for tracker in updated_trackers:
-            if tracker.obstacle.id not in unique_updated_trackers:
-                unique_updated_trackers[tracker.obstacle.id] = tracker
-            elif (unique_updated_trackers[tracker.obstacle.id].
+            if tracker.track_id not in unique_updated_trackers:
+                unique_updated_trackers[tracker.track_id] = tracker
+            elif (unique_updated_trackers[tracker.track_id].
                   missed_det_updates > tracker.missed_det_updates):
-                unique_updated_trackers[tracker.obstacle.id] = tracker
+                unique_updated_trackers[tracker.track_id] = tracker
 
         self._trackers = list(unique_updated_trackers.values())
 
