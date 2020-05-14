@@ -307,6 +307,7 @@ class DetectedObstacle(object):
                          text=None):
         """Annotate the image with the bounding box of the obstacle."""
         txt_font = cv2.FONT_HERSHEY_SIMPLEX
+        text = 'id:{}'.format(self.id)
         if text is None:
             text = '{}{:.1f}'.format(self.label, self.confidence)
             if self.id != -1:
